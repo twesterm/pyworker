@@ -11,6 +11,7 @@ MODEL_SERVER_START_LOG_MSG = [
     "llama runner started",  # Ollama
     '"message":"Connected","target":"text_generation_router"',  # TGI
     '"message":"Connected","target":"text_generation_router::server"',  # TGI
+    "srv  update_slots: all slots are idle",  # llama.cpp
 ]
 
 MODEL_SERVER_ERROR_LOG_MSGS = [
@@ -21,6 +22,7 @@ MODEL_SERVER_ERROR_LOG_MSGS = [
     "Error: WebserverFailed",  # TGI
     "Error: DownloadError",  # TGI
     "Error: ShardCannotStart",  # TGI
+    "main: exiting due to model loading error",  # llama.cpp
 ]
 
 logging.basicConfig(
