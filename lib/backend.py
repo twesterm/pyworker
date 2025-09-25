@@ -370,13 +370,18 @@ class Backend:
 
         async def tail_log():
             log.debug(f"tailing file: {self.model_log_file}")
-            async with await open_file(self.model_log_file) as f:
+            async with await open_file(self.model_log_file, encoding='utf-8', errors='replace') as f:
                 while True:
-                    line = await f.readline()
-                    if line:
-                        await handle_log_line(line.rstrip())
-                    else:
-                        time.sleep(LOG_POLL_INTERVAL)
+                    try:
+                        line = await f.readline()
+                        if line:
+                            await handle_log_line(line.rstrip())
+                        else:
+                            await sleep(LOG_POLL_INTERVAL)
+                    except Exception as e:
+                        log.debug(f"Error reading log line: {e}")
+                        await sleep(LOG_POLL_INTERVAL)
+                        continue
 
         ###########
 
