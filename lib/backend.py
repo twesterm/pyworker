@@ -190,18 +190,30 @@ class Backend:
             log.debug(f"Exception in main handler loop {e}")
             return web.Response(status=500)
 
+    @cached_property  
+    def healthcheck_session(self):
+        """Dedicated session for healthchecks to avoid conflicts with API session"""
+        log.debug("creating dedicated healthcheck session")
+        connector = TCPConnector(
+            force_close=True,  # Keep this for isolation
+            enable_cleanup_closed=True,
+        )
+        timeout = ClientTimeout(total=10)  # Reasonable timeout for healthchecks
+        return ClientSession(timeout=timeout, connector=connector)
+
     async def __healthcheck(self):
         health_check_url = self.benchmark_handler.healthcheck_endpoint
         if health_check_url is None:
             log.debug("No healthcheck endpoint defined, skipping healthcheck")
             return
+
         while True:
             await sleep(10)
             if self.__start_healthcheck is False:
                 continue
             try:
                 log.debug(f"Performing healthcheck on {health_check_url}")
-                async with self.session.get(health_check_url) as response:
+                async with self.healthcheck_session.get(health_check_url) as response:
                     if response.status == 200:
                         log.debug("Healthcheck successful")
                     elif response.status == 503:
@@ -210,7 +222,6 @@ class Backend:
                             f"Healthcheck failed with status: {response.status}"
                         )
                     else:
-                        # endpoint not ready yet so bail
                         log.debug(f"Healthcheck Endpoint not ready: {response.status}")
             except Exception as e:
                 log.debug(f"Healthcheck failed with exception: {e}")
