@@ -70,6 +70,7 @@ class AuthData:
     endpoint: str
     reqnum: int
     url: str
+    request_idx: int
 
     @classmethod
     def from_json_msg(cls, json_msg: Dict[str, Any]):
@@ -197,6 +198,14 @@ class SystemMetrics:
 
 
 @dataclass
+class RequestMetrics:
+    """Tracks metrics for an active request."""
+    request_idx: int
+    reqnum: int
+    workload: float
+    status: str
+
+@dataclass
 class ModelMetrics:
     """Model specific metrics"""
 
@@ -205,12 +214,14 @@ class ModelMetrics:
     workload_received: float
     workload_cancelled: float
     workload_errored: float
+    workload_rejected: float
     # these are not
     workload_pending: float
     error_msg: Optional[str]
     max_throughput: float
     requests_recieved: Set[int] = field(default_factory=set)
-    requests_working: Set[int] = field(default_factory=set)
+    requests_working: dict[int, RequestMetrics] = field(default_factory=dict)
+    requests_deleting: list[RequestMetrics] = field(default_factory=list)
     last_update: float = field(default_factory=time.time)
 
     @classmethod
@@ -220,18 +231,29 @@ class ModelMetrics:
             workload_served=0.0,
             workload_cancelled=0.0,
             workload_errored=0.0,
+            workload_rejected=0.0,
             workload_received=0.0,
             error_msg=None,
             max_throughput=0.0,
         )
-
-    @property
-    def cur_perf(self) -> float:
-        return max(self.workload_served / (time.time() - self.last_update), 0.0)
-
+    
     @property
     def workload_processing(self) -> float:
         return max(self.workload_received - self.workload_cancelled, 0.0)
+
+    @property
+    def wait_time(self) -> float:
+        if (len(self.requests_working) == 0):
+            return 0.0
+        return sum([request.workload for request in self.requests_working.values()]) / self.max_throughput
+    
+    @property
+    def cur_load(self) -> float:
+        return sum([request.workload for request in self.requests_working.values()])
+
+    @property
+    def working_request_idxs(self) -> list[int]:
+        return [req.request_idx for req in self.requests_working.values()]
 
     def set_errored(self, error_msg):
         self.reset()
@@ -242,16 +264,19 @@ class ModelMetrics:
         self.workload_received = 0
         self.workload_cancelled = 0
         self.workload_errored = 0
+        self.workload_rejected = 0
         self.last_update = time.time()
 
 
 @dataclass
-class AutoScalaerData:
+class AutoScalerData:
     """Data that is reported to autoscaler"""
 
     id: int
     loadtime: float
     cur_load: float
+    rej_load: float
+    new_load: float
     error_msg: str
     max_perf: float
     cur_perf: float
@@ -260,6 +285,7 @@ class AutoScalaerData:
     num_requests_working: int
     num_requests_recieved: int
     additional_disk_usage: float
+    working_request_idxs: list[int]
     url: str
 
 
