@@ -45,6 +45,7 @@ class Metrics:
         self.model_metrics.workload_received += workload
         self.model_metrics.requests_recieved.add(reqnum)
         self.model_metrics.requests_working.add(reqnum)
+        self.update_pending = True
 
     def _request_end(self, workload: float, reqnum: int) -> None:
         """
