@@ -273,6 +273,7 @@ class AutoScalerData:
     """Data that is reported to autoscaler"""
 
     id: int
+    version: str
     loadtime: float
     cur_load: float
     rej_load: float

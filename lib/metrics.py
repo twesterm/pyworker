@@ -27,6 +27,7 @@ def get_url() -> str:
 
 @dataclass
 class Metrics:
+    version: str = "0"
     last_metric_update: float = 0.0
     last_request_served: float = 0.0
     update_pending: bool = False
@@ -120,6 +121,9 @@ class Metrics:
         self.model_metrics.set_errored(error_msg)
         self.system_metrics.model_is_loaded = True
 
+    def _set_version(self, version: str) -> None:
+        self.version = version
+
     #######################################Private#######################################
 
     def __send_delete_requests_and_reset(self):
@@ -154,6 +158,7 @@ class Metrics:
         def compute_autoscaler_data() -> AutoScalerData:
             return AutoScalerData(
                 id=self.id,
+                version=self.version,
                 loadtime=(self.system_metrics.model_loading_time or 0.0),
                 new_load=self.model_metrics.workload_processing,
                 cur_load=self.model_metrics.cur_load,

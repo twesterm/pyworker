@@ -29,6 +29,8 @@ from lib.data_types import (
     RequestMetrics
 )
 
+VERSION = "0.1.0"
+
 MSG_HISTORY_LEN = 100
 log = logging.getLogger(__file__)
 
@@ -57,6 +59,7 @@ class Backend:
     log_actions: List[Tuple[LogAction, str]]
     max_wait_time: float = 10.0
     reqnum = -1
+    version = VERSION
     msg_history = []
     sem: Semaphore = dataclasses.field(default_factory=Semaphore)
     unsecured: bool = dataclasses.field(
@@ -65,6 +68,7 @@ class Backend:
 
     def __post_init__(self):
         self.metrics = Metrics()
+        self.metrics._set_version(self.version)
         self._total_pubkey_fetch_errors = 0
         self._pubkey = self._fetch_pubkey()
         self.__start_healthcheck: bool = False
