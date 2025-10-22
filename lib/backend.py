@@ -144,8 +144,6 @@ class Backend:
             raise asyncio.CancelledError
 
         async def make_request() -> Union[web.Response, web.StreamResponse]:
-            log.debug(f"got request, {request_metrics.reqnum}")
-            self.metrics._request_start(request_metrics)
             try:
                 response = await self.__call_api(handler=handler, payload=payload)
                 status_code = response.status
@@ -186,6 +184,7 @@ class Backend:
                 )
             else:
                 log.debug(f"Starting request for reqnum:{request_metrics.reqnum}")
+            self.metrics._request_start(request_metrics)
             done, pending = await wait(
                 [
                     create_task(make_request()),
