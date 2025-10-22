@@ -411,7 +411,7 @@ class Backend:
                     if line:
                         await handle_log_line(line.rstrip())
                     else:
-                        time.sleep(LOG_POLL_INTERVAL)
+                        await asyncio.sleep(LOG_POLL_INTERVAL)
 
         ###########
 
