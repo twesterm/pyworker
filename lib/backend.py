@@ -175,6 +175,7 @@ class Backend:
 
         acquired = False
         try:
+            self.metrics._request_start(request_metrics)
             if self.allow_parallel_requests is False:
                 log.debug(f"Waiting to aquire Sem for reqnum:{request_metrics.reqnum}")
                 await self.sem.acquire()
@@ -184,7 +185,6 @@ class Backend:
                 )
             else:
                 log.debug(f"Starting request for reqnum:{request_metrics.reqnum}")
-            self.metrics._request_start(request_metrics)
             done, pending = await wait(
                 [
                     create_task(make_request()),
