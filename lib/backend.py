@@ -136,7 +136,6 @@ class Backend:
             return web.json_response(dict(error="invalid JSON"), status=422)
         workload = payload.count_workload()
         request_metrics: RequestMetrics = RequestMetrics(request_idx=auth_data.request_idx, reqnum=auth_data.reqnum, workload=workload, status="Created")
-        acquired = False
 
         async def cancel_api_call_if_disconnected() -> web.Response:
             await request.wait_for_disconnection()
@@ -147,15 +146,6 @@ class Backend:
         async def make_request() -> Union[web.Response, web.StreamResponse]:
             log.debug(f"got request, {request_metrics.reqnum}")
             self.metrics._request_start(request_metrics)
-            if self.allow_parallel_requests is False:
-                log.debug(f"Waiting to aquire Sem for reqnum:{request_metrics.reqnum}")
-                await self.sem.acquire()
-                acquired = True
-                log.debug(
-                    f"Sem acquired for reqnum:{request_metrics.reqnum}, starting request..."
-                )
-            else:
-                log.debug(f"Starting request for reqnum:{request_metrics.reqnum}")
             try:
                 response = await self.__call_api(handler=handler, payload=payload)
                 status_code = response.status
@@ -185,7 +175,17 @@ class Backend:
             self.metrics._request_reject(request_metrics)
             return web.Response(status=500)
 
+        acquired = False
         try:
+            if self.allow_parallel_requests is False:
+                log.debug(f"Waiting to aquire Sem for reqnum:{request_metrics.reqnum}")
+                await self.sem.acquire()
+                acquired = True
+                log.debug(
+                    f"Sem acquired for reqnum:{request_metrics.reqnum}, starting request..."
+                )
+            else:
+                log.debug(f"Starting request for reqnum:{request_metrics.reqnum}")
             done, pending = await wait(
                 [
                     create_task(make_request()),
@@ -193,7 +193,10 @@ class Backend:
                 ],
                 return_when=FIRST_COMPLETED,
             )
-            [task.cancel() for task in pending]
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
             done_task = done.pop()
             try:
                 return done_task.result()
