@@ -136,6 +136,7 @@ class Backend:
             return web.json_response(dict(error="invalid JSON"), status=422)
         workload = payload.count_workload()
         request_metrics: RequestMetrics = RequestMetrics(request_idx=auth_data.request_idx, reqnum=auth_data.reqnum, workload=workload, status="Created")
+        acquired = False
 
         async def cancel_api_call_if_disconnected() -> web.Response:
             await request.wait_for_disconnection()
@@ -149,6 +150,7 @@ class Backend:
             if self.allow_parallel_requests is False:
                 log.debug(f"Waiting to aquire Sem for reqnum:{request_metrics.reqnum}")
                 await self.sem.acquire()
+                acquired = True
                 log.debug(
                     f"Sem acquired for reqnum:{request_metrics.reqnum}, starting request..."
                 )
@@ -206,7 +208,7 @@ class Backend:
             return web.Response(status=500)
         finally:
             # Always release the semaphore if it was acquired
-            if not self.allow_parallel_requests:
+            if acquired:
                 self.sem.release()
             self.metrics._request_end(request_metrics)
 
