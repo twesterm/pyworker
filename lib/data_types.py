@@ -204,6 +204,7 @@ class RequestMetrics:
     reqnum: int
     workload: float
     status: str
+    success: bool = False
 
 @dataclass
 class ModelMetrics:

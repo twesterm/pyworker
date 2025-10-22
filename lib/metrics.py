@@ -66,6 +66,7 @@ class Metrics:
         """
         self.model_metrics.workload_served += request.workload
         request.status = "Success"
+        request.success = True
         self.update_pending = True
 
     def _request_errored(self, request: RequestMetrics) -> None:
@@ -74,6 +75,7 @@ class Metrics:
         """
         self.model_metrics.workload_errored += request.workload
         request.status = "Error"
+        request.success = False
         self.update_pending = True
 
     def _request_canceled(self, request: RequestMetrics) -> None:
@@ -81,6 +83,7 @@ class Metrics:
         this function is called if client drops connection before model API has responded
         """
         self.model_metrics.workload_cancelled += request.workload
+        request.success = True
         request.status = "Cancelled"
     
     def _request_reject(self, request: RequestMetrics):
@@ -90,6 +93,7 @@ class Metrics:
         self.model_metrics.requests_recieved.add(request.reqnum)
         self.model_metrics.requests_deleting.append(request)
         self.model_metrics.workload_rejected += request.workload
+        request.success = False
         request.status = "Rejected"
         self.update_pending = True
 
@@ -128,10 +132,11 @@ class Metrics:
 
     def __send_delete_requests_and_reset(self):
 
-        def send_data(report_addr: str) -> bool:
+        def send_data(report_addr: str, success: bool) -> bool:
             data = {
                 "worker_id": self.id,
-                "request_idxs": [r.request_idx for r in self.model_metrics.requests_deleting]
+                "request_idxs": [r.request_idx for r in self.model_metrics.requests_deleting if r.success == success],
+                "success": success
             }
             full_path = report_addr.rstrip("/") + "/delete_requests/"
             for attempt in range(1, 4):
@@ -147,7 +152,7 @@ class Metrics:
                 log.debug(f"retrying delete_request, attempt: {attempt}")
 
         for report_addr in self.report_addr:
-            success = send_data(report_addr)
+            success = send_data(report_addr, success=True) and send_data(report_addr, success=False)
             if success is True:
                 self.model_metrics.requests_deleting.clear()
                 break
