@@ -5,7 +5,7 @@ import json
 from asyncio import sleep
 from dataclasses import dataclass, asdict, field
 from functools import cache
-
+import asyncio
 import requests
 
 from lib.data_types import AutoScalerData, SystemMetrics, ModelMetrics, RequestMetrics
@@ -143,7 +143,7 @@ class Metrics:
                     log.debug(f"delete_requests timed out")
                 except Exception as e:
                     log.debug(f"delete_requests failed with error: {e}")
-                time.sleep(2)
+                asyncio.sleep(2)
                 log.debug(f"retrying delete_request, attempt: {attempt}")
 
         for report_addr in self.report_addr:
@@ -197,7 +197,7 @@ class Metrics:
                     log.debug(f"autoscaler status update timed out")
                 except Exception as e:
                     log.debug(f"autoscaler status update failed with error: {e}")
-                time.sleep(2)
+                asyncio.sleep(2)
                 log.debug(f"retrying autoscaler status update, attempt: {attempt}")
             log.debug(f"failed to send update through {report_addr}")
             return False
