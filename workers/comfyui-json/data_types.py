@@ -43,6 +43,7 @@ class ComfyWorkflowData(ApiPayload):
                     }
                 )
             except (json.JSONDecodeError, IOError):
+                # JSON is malformed or file can't be read, fall through to default
                 log.error(f"Failed to benchmark using {benchmark_file}")
         
         # Fallback: read prompts and construct payload
