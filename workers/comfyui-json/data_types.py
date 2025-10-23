@@ -43,9 +43,10 @@ class ComfyWorkflowData(ApiPayload):
                     }
                 )
             except (json.JSONDecodeError, IOError):
-                log.info(f"{benchmark_file} not found.  Using fallback method")
+                log.error(f"Failed to benchmark using {benchmark_file}")
         
         # Fallback: read prompts and construct payload
+        log.info("Using fallback method for benchmarking")
         with open("workers/comfyui-json/misc/test_prompts.txt", "r") as f:
             test_prompts = f.readlines()
         
