@@ -171,7 +171,7 @@ class Backend:
         
         if self.metrics.model_metrics.wait_time > self.max_wait_time:
             self.metrics._request_reject(request_metrics)
-            return web.Response(status=500)
+            return web.Response(status=429)
 
         acquired = False
         try:
