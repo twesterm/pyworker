@@ -7,8 +7,11 @@ from functools import cache
 from math import ceil
 from pathlib import Path
 import json
+import logging
 
 from lib.data_types import ApiPayload, JsonDataException
+
+log = logging.getLogger(__file__)
 
 def count_workload() -> float:
     # Always 100.0 where there is a single instance of ComfyUI handling requests
@@ -41,9 +44,10 @@ class ComfyWorkflowData(ApiPayload):
                 )
             except (json.JSONDecodeError, IOError):
                 # JSON is malformed or file can't be read, fall through to default
-                pass
+                log.error(f"Failed to benchmark using {benchmark_file}")
         
         # Fallback: read prompts and construct payload
+        log.info("Using fallback method for benchmarking")
         with open("workers/comfyui-json/misc/test_prompts.txt", "r") as f:
             test_prompts = f.readlines()
         
