@@ -152,11 +152,13 @@ class Metrics:
                 "request_idxs": [r.request_idx for r in self.model_metrics.requests_deleting if r.success == success],
                 "success": success
             }
+            log.debug(f"Deleting requests that { "succeeded" if success else "failed"}: {data["request_idxs"]}")
             full_path = report_addr.rstrip("/") + "/delete_requests/"
             for attempt in range(1, 4):
                 try:
                     session = await self.http()
                     async with session.post(full_path, json=data) as res:
+                        log.debug(f"delete_requests response: {res.status}")
                         res.raise_for_status()
                     return True
                 except asyncio.TimeoutError:
