@@ -152,7 +152,7 @@ class Metrics:
                 "request_idxs": [r.request_idx for r in self.model_metrics.requests_deleting if r.success == success],
                 "success": success
             }
-            log.debug(f"Deleting requests that { "succeeded" if success else "failed"}: {data["request_idxs"]}")
+            log.debug(f"Deleting requests that {'succeeded' if success else 'failed'}: {data['request_idxs']}")
             full_path = report_addr.rstrip("/") + "/delete_requests/"
             for attempt in range(1, 4):
                 try:
