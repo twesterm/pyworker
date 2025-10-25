@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Union, Tuple, Optional, Set, TypeVar, Generic, Type
+from typing import Dict, Any, Union, Tuple, Optional, Set, TypeVar, Generic, Type, Awaitable
 from aiohttp import web, ClientResponse
 import inspect
 
@@ -205,6 +205,17 @@ class RequestMetrics:
     workload: float
     status: str
     success: bool = False
+
+@dataclass
+class BenchmarkResult:
+    request_idx: int
+    workload: float
+    task: Awaitable[ClientResponse]
+    response: Optional[ClientResponse] = None
+
+    @property
+    def is_successful(self) -> bool:
+        return self.response is not None and self.response.status == 200
 
 @dataclass
 class ModelMetrics:
