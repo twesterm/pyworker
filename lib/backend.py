@@ -59,6 +59,8 @@ class Backend:
     )
     log_actions: List[Tuple[LogAction, str]]
     max_wait_time: float = 10.0
+    request_queue = asyncio.Queue()
+    worker_task = asyncio.create_task(_worker())
     reqnum = -1
     version = VERSION
     msg_history = []
@@ -90,6 +92,17 @@ class Backend:
         
         timeout = ClientTimeout(total=None)
         return ClientSession(self.model_server_url, timeout=timeout, connector=connector)
+
+    async def _worker(self):
+        while True:
+            handler, request, fut = await self.request_queue.get()
+            try:
+                res = await self.__process_request(handler, request)
+                fut.set_result(res)
+            except Exception as e:
+                fut.set_exception(e)
+            finally:
+                self.request_queue.task_done()
 
     def create_handler(
         self,
