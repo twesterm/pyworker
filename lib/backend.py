@@ -350,6 +350,9 @@ class Backend:
                 total_workload = sum(br.workload for br in benchmark_requests if br.is_successful)
                 time_elapsed = time.time() - start
                 successful_responses = sum([1 for br in benchmark_requests if br.is_successful])
+                if successful_responses == 0:
+                    self.backend_errored("No successful responses from benchmark")
+                    log.debug(f"benchmark failed: {successful_responses}/{concurrent_requests} successful responses")
 
                 throughput = total_workload / time_elapsed
                 sum_throughput += throughput
