@@ -180,6 +180,10 @@ class Metrics:
             return  # nothing to do
 
         for report_addr in self.report_addr:
+            # TODO: Add a Redis subscriber queue for delete_requests
+            if report_addr == "https://cloud.vast.ai/api/v0":
+                # Patch: ignore the Redis API report_addr
+                continue
             sent_success = True
             sent_failed  = True
 
