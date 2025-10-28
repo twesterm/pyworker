@@ -59,8 +59,6 @@ class Backend:
     )
     log_actions: List[Tuple[LogAction, str]]
     max_wait_time: float = 10.0
-    request_queue = asyncio.Queue()
-    worker_task = asyncio.create_task(_worker())
     reqnum = -1
     version = VERSION
     msg_history = []
