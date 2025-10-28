@@ -12,6 +12,7 @@ from distutils.util import strtobool
 
 from anyio import open_file
 from aiohttp import web, ClientResponse, ClientSession, ClientConnectorError, ClientTimeout, TCPConnector
+import asyncio
 
 import requests
 from Crypto.Signature import pkcs1_15
@@ -25,7 +26,11 @@ from lib.data_types import (
     LogAction,
     ApiPayload_T,
     JsonDataException,
+    RequestMetrics,
+    BenchmarkResult
 )
+
+VERSION = "0.1.0"
 
 MSG_HISTORY_LEN = 100
 log = logging.getLogger(__file__)
@@ -53,7 +58,9 @@ class Backend:
         EndpointHandler  # this endpoint handler will be used for benchmarking
     )
     log_actions: List[Tuple[LogAction, str]]
+    max_wait_time: float = 10.0
     reqnum = -1
+    version = VERSION
     msg_history = []
     sem: Semaphore = dataclasses.field(default_factory=Semaphore)
     unsecured: bool = dataclasses.field(
@@ -62,6 +69,7 @@ class Backend:
 
     def __post_init__(self):
         self.metrics = Metrics()
+        self.metrics._set_version(self.version)
         self._total_pubkey_fetch_errors = 0
         self._pubkey = self._fetch_pubkey()
         self.__start_healthcheck: bool = False
@@ -128,55 +136,56 @@ class Backend:
         except json.JSONDecodeError:
             return web.json_response(dict(error="invalid JSON"), status=422)
         workload = payload.count_workload()
+        request_metrics: RequestMetrics = RequestMetrics(request_idx=auth_data.request_idx, reqnum=auth_data.reqnum, workload=workload, status="Created")
 
         async def cancel_api_call_if_disconnected() -> web.Response:
             await request.wait_for_disconnection()
-            log.debug(f"request with reqnum: {auth_data.reqnum} was canceled")
-            self.metrics._request_canceled(workload=workload)
-            return web.Response(status=500)
+            log.debug(f"request with reqnum: {request_metrics.reqnum} was canceled")
+            self.metrics._request_canceled(request_metrics)
+            raise asyncio.CancelledError
 
         async def make_request() -> Union[web.Response, web.StreamResponse]:
-            log.debug(f"got request, {auth_data.reqnum}")
-            self.metrics._request_start(workload=workload, reqnum=auth_data.reqnum)
-            if self.allow_parallel_requests is False:
-                log.debug(f"Waiting to aquire Sem for reqnum:{auth_data.reqnum}")
-                await self.sem.acquire()
-                log.debug(
-                    f"Sem acquired for reqnum:{auth_data.reqnum}, starting request..."
-                )
-            else:
-                log.debug(f"Starting request for reqnum:{auth_data.reqnum}")
             try:
                 response = await self.__call_api(handler=handler, payload=payload)
                 status_code = response.status
                 log.debug(
                     " ".join(
                         [
-                            f"request with reqnum:{auth_data.reqnum}",
+                            f"request with reqnum:{request_metrics.reqnum}",
                             f"returned status code: {status_code},",
                         ]
                     )
                 )
                 res = await handler.generate_client_response(request, response)
-                self.metrics._request_success(workload=workload)
+                self.metrics._request_success(request_metrics)
                 return res
             except requests.exceptions.RequestException as e:
                 log.debug(f"[backend] Request error: {e}")
-                self.metrics._request_errored(workload=workload)
+                self.metrics._request_errored(request_metrics)
                 return web.Response(status=500)
-            finally:
-                self.metrics._request_end(
-                    workload=workload,
-                    reqnum=auth_data.reqnum,
-                )
-                self.sem.release()
 
         ###########
 
         if self.__check_signature(auth_data) is False:
+            self.metrics._request_reject(request_metrics)
             return web.Response(status=401)
+        
+        if self.metrics.model_metrics.wait_time > self.max_wait_time:
+            self.metrics._request_reject(request_metrics)
+            return web.Response(status=429)
 
+        acquired = False
         try:
+            self.metrics._request_start(request_metrics)
+            if self.allow_parallel_requests is False:
+                log.debug(f"Waiting to aquire Sem for reqnum:{request_metrics.reqnum}")
+                await self.sem.acquire()
+                acquired = True
+                log.debug(
+                    f"Sem acquired for reqnum:{request_metrics.reqnum}, starting request..."
+                )
+            else:
+                log.debug(f"Starting request for reqnum:{request_metrics.reqnum}")
             done, pending = await wait(
                 [
                     create_task(make_request()),
@@ -184,11 +193,27 @@ class Backend:
                 ],
                 return_when=FIRST_COMPLETED,
             )
-            [task.cancel() for task in pending]
-            return done.pop().result()
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+            done_task = done.pop()
+            try:
+                return done_task.result()
+            except Exception as e:
+                log.debug(f"Request task raised exception: {e}")
+                return web.Response(status=500)
+        except asyncio.CancelledError:
+            # Client is gone. Do not write a response; just unwind.
+            return web.Response(status=499) 
         except Exception as e:
             log.debug(f"Exception in main handler loop {e}")
             return web.Response(status=500)
+        finally:
+            # Always release the semaphore if it was acquired
+            if acquired:
+                self.sem.release()
+            self.metrics._request_end(request_metrics)
 
     @cached_property  
     def healthcheck_session(self):
@@ -229,7 +254,7 @@ class Backend:
 
     async def _start_tracking(self) -> None:
         await gather(
-            self.__read_logs(), self.metrics._send_metrics_loop(), self.__healthcheck()
+            self.__read_logs(), self.metrics._send_metrics_loop(), self.__healthcheck(), self.metrics._send_delete_requests_loop()
         )
 
     def backend_errored(self, msg: str) -> None:
@@ -308,18 +333,26 @@ class Backend:
 
             for run in range(1, self.benchmark_handler.benchmark_runs + 1):
                 start = time.time()
-                tasks = []
-                total_workload = 0
+                benchmark_requests = []
 
-                for _ in range(concurrent_requests):
+                for i in range(concurrent_requests):
                     payload = self.benchmark_handler.make_benchmark_payload()
-                    total_workload += payload.count_workload()
-                    tasks.append(
-                        self.__call_api(handler=self.benchmark_handler, payload=payload)
+                    workload = payload.count_workload()
+                    task = self.__call_api(handler=self.benchmark_handler, payload=payload)
+                    benchmark_requests.append(
+                        BenchmarkResult(request_idx=i, workload=workload, task=task)
                     )
 
-                responses = await gather(*tasks)
+                responses = await gather(*[br.task for br in benchmark_requests])
+                for br, response in zip(benchmark_requests, responses):
+                    br.response = response
+
+                total_workload = sum(br.workload for br in benchmark_requests if br.is_successful)
                 time_elapsed = time.time() - start
+                successful_responses = sum([1 for br in benchmark_requests if br.is_successful])
+                if successful_responses == 0:
+                    self.backend_errored("No successful responses from benchmark")
+                    log.debug(f"benchmark failed: {successful_responses}/{concurrent_requests} successful responses")
 
                 throughput = total_workload / time_elapsed
                 sum_throughput += throughput
@@ -333,7 +366,7 @@ class Backend:
                             f"Run: {run}, concurrent_requests: {concurrent_requests}",
                             f"Total workload: {total_workload}, time_elapsed: {time_elapsed}s",
                             f"Throughput: {throughput} workload/s",
-                            f"Successful responses: {len([r for r in responses if r.status == 200])}",
+                            f"Successful responses: {successful_responses}/{concurrent_requests}",
                             "#" * 60,
                         ]
                     )
@@ -387,7 +420,7 @@ class Backend:
                     if line:
                         await handle_log_line(line.rstrip())
                     else:
-                        time.sleep(LOG_POLL_INTERVAL)
+                        await asyncio.sleep(LOG_POLL_INTERVAL)
 
         ###########
 
