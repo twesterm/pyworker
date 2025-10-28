@@ -200,11 +200,13 @@ class Metrics:
 
     async def __send_metrics_and_reset(self):
 
+        loadtime_snapshot = self.system_metrics.model_loading_time
+
         def compute_autoscaler_data() -> AutoScalerData:
             return AutoScalerData(
                 id=self.id,
                 version=self.version,
-                loadtime=(self.system_metrics.model_loading_time or 0.0),
+                loadtime=(loadtime_snapshot or 0.0), 
                 new_load=self.model_metrics.workload_processing,
                 cur_load=self.model_metrics.cur_load,
                 rej_load=self.model_metrics.workload_rejected,
@@ -252,11 +254,15 @@ class Metrics:
 
         self.system_metrics.update_disk_usage()
 
+        sent = False
         for report_addr in self.report_addr:
-            success = await send_data(report_addr)
-            if success is True:
+            if await send_data(report_addr):
+                sent = True
                 break
-        self.update_pending = False
-        self.model_metrics.reset()
-        self.system_metrics.reset()
-        self.last_metric_update = time.time()
+
+        if sent:
+            # clear the one-shot loadtime only if we actually sent *this* value
+            self.system_metrics.reset(expected=loadtime_snapshot)
+            self.update_pending = False
+            self.model_metrics.reset()
+            self.last_metric_update = time.time()

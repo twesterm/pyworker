@@ -190,11 +190,12 @@ class SystemMetrics:
         self.additional_disk_usage = disk_usage - self.last_disk_usage
         self.last_disk_usage = disk_usage
 
-    def reset(self):
+    def reset(self, expected: float | None) -> None:
         # autoscaler excepts model_loading_time to be populated only once, when the instance has
         # finished benchmarking and is ready to receive requests. This applies to restarted instances
         # as well: they should send model_loading_time once when they are done loading
-        self.model_loading_time = None
+        if self.model_loading_time == expected:
+            self.model_loading_time = None
 
 
 @dataclass
