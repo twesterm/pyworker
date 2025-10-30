@@ -66,6 +66,9 @@ class Backend:
     unsecured: bool = dataclasses.field(
         default_factory=lambda: bool(strtobool(os.environ.get("UNSECURED", "false"))),
     )
+    report_addr: str = dataclasses.field(
+        default_factory=lambda: os.environ.get("REPORT_ADDR", "https://run.vast.ai")
+    )
 
     def __post_init__(self):
         self.metrics = Metrics()
@@ -104,23 +107,19 @@ class Backend:
 
     #######################################Private#######################################
     def _fetch_pubkey(self):
-        command = ["curl", "-X", "GET", "https://run.vast.ai/pubkey/"]
-        result = subprocess.check_output(command, universal_newlines=True)
-        log.debug("public key:")
-        log.debug(result)
-        key = None
-        for _ in range(5):
-            try:
-                key = RSA.import_key(result)
-                break
-            except ValueError as e:
-                log.debug(f"Error downloading key: {e}")
-                time.sleep(15)
-        if key is None:
-            self._total_pubkey_fetch_errors += 1
-            if self._total_pubkey_fetch_errors >= MAX_PUBKEY_FETCH_ATTEMPTS:
-                self.backend_errored("Failed to get autoscaler pubkey")
-        return key
+        report_addr = self.report_addr.rstrip("/")
+        command = ["curl", "-X", "GET", f"{report_addr}/pubkey/"]
+        try:
+            result = subprocess.check_output(command, universal_newlines=True)
+            log.debug("public key:")
+            log.debug(result)
+            key = RSA.import_key(result)
+            if key is not None:
+                return key
+        except (ValueError , subprocess.CalledProcessError) as e:
+            log.debug(f"Error downloading key: {e}")
+        self.backend_errored("Failed to get autoscaler pubkey")
+       
 
     async def __handle_request(
         self,
