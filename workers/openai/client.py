@@ -66,7 +66,7 @@ class APIClient:
             "cost": message["cost"],
             "endpoint": message["endpoint"],
             "reqnum": message["reqnum"],
-            "request_idx": message.get("request_idx", message["reqnum"]),  # Use reqnum as fallback
+            "request_idx": message.get("request_idx",  message["reqnum"]),  # Use reqnum as fallback
             "url": message["url"],
         }
 
