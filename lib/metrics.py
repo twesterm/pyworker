@@ -28,6 +28,7 @@ def get_url() -> str:
 @dataclass
 class Metrics:
     version: str = "0"
+    mtoken: str = ""
     last_metric_update: float = 0.0
     last_request_served: float = 0.0
     update_pending: bool = False
@@ -142,12 +143,16 @@ class Metrics:
     def _set_version(self, version: str) -> None:
         self.version = version
 
+    def _set_mtoken(self, mtoken: str) -> None:
+        self.mtoken = mtoken
+
     #######################################Private#######################################
 
     async def __send_delete_requests_and_reset(self):
         async def post(report_addr: str, idxs: list[int], success_flag: bool) -> bool:
             data = {
                 "worker_id": self.id,
+                "mtoken": self.mtoken,
                 "request_idxs": idxs,
                 "success": success_flag,
             }
@@ -209,6 +214,7 @@ class Metrics:
         def compute_autoscaler_data() -> AutoScalerData:
             return AutoScalerData(
                 id=self.id,
+                mtoken=self.mtoken,
                 version=self.version,
                 loadtime=(loadtime_snapshot or 0.0), 
                 new_load=self.model_metrics.workload_processing,
