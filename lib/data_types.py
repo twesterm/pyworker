@@ -286,7 +286,7 @@ class AutoScalerData:
     """Data that is reported to autoscaler"""
 
     id: int
-    moken: str
+    mtoken: str
     version: str
     loadtime: float
     cur_load: float
