@@ -238,7 +238,7 @@ class Metrics:
             def obfuscate(secret: str) -> str:
                 if secret is None:
                     return ""
-                return secret[:7] if len(secret) > 7 else ("*" * len(secret))
+                return secret[:7] + "..." if len(secret) > 7 else ("*" * len(secret))
             
             log_data["mtoken"] = obfuscate(log_data.get("mtoken"))
             log.debug(
