@@ -234,17 +234,25 @@ class Metrics:
 
         async def send_data(report_addr: str) -> bool:
             data = compute_autoscaler_data()
-            full_path = report_addr.rstrip("/") + "/worker_status/"
+            log_data = asdict(data)
+            def obfuscate(secret: str) -> str:
+                if secret is None:
+                    return ""
+                return secret[:7] if len(secret) > 7 else ("*" * len(secret))
+            
+            log_data["mtoken"] = obfuscate(log_data.get("mtoken"))
             log.debug(
                 "\n".join(
                     [
                         "#" * 60,
                         f"sending data to autoscaler",
-                        f"{json.dumps((asdict(data)), indent=2)}",
+                        f"{json.dumps(log_data, indent=2)}",
                         "#" * 60,
                     ]
                 )
             )
+
+            full_path = report_addr.rstrip("/") + "/worker_status/"
             for attempt in range(1, 4):
                 try:
                     session = await self.http()
