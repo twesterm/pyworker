@@ -28,6 +28,7 @@ def get_url() -> str:
 @dataclass
 class Metrics:
     version: str = "0"
+    mtoken: str = ""
     last_metric_update: float = 0.0
     last_request_served: float = 0.0
     update_pending: bool = False
@@ -142,12 +143,16 @@ class Metrics:
     def _set_version(self, version: str) -> None:
         self.version = version
 
+    def _set_mtoken(self, mtoken: str) -> None:
+        self.mtoken = mtoken
+
     #######################################Private#######################################
 
     async def __send_delete_requests_and_reset(self):
         async def post(report_addr: str, idxs: list[int], success_flag: bool) -> bool:
             data = {
                 "worker_id": self.id,
+                "mtoken": self.mtoken,
                 "request_idxs": idxs,
                 "success": success_flag,
             }
@@ -209,6 +214,7 @@ class Metrics:
         def compute_autoscaler_data() -> AutoScalerData:
             return AutoScalerData(
                 id=self.id,
+                mtoken=self.mtoken,
                 version=self.version,
                 loadtime=(loadtime_snapshot or 0.0), 
                 new_load=self.model_metrics.workload_processing,
@@ -228,17 +234,25 @@ class Metrics:
 
         async def send_data(report_addr: str) -> bool:
             data = compute_autoscaler_data()
-            full_path = report_addr.rstrip("/") + "/worker_status/"
+            log_data = asdict(data)
+            def obfuscate(secret: str) -> str:
+                if secret is None:
+                    return ""
+                return secret[:7] + "..." if len(secret) > 7 else ("*" * len(secret))
+            
+            log_data["mtoken"] = obfuscate(log_data.get("mtoken"))
             log.debug(
                 "\n".join(
                     [
                         "#" * 60,
                         f"sending data to autoscaler",
-                        f"{json.dumps((asdict(data)), indent=2)}",
+                        f"{json.dumps(log_data, indent=2)}",
                         "#" * 60,
                     ]
                 )
             )
+
+            full_path = report_addr.rstrip("/") + "/worker_status/"
             for attempt in range(1, 4):
                 try:
                     session = await self.http()

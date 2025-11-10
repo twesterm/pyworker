@@ -30,7 +30,7 @@ from lib.data_types import (
     BenchmarkResult
 )
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 MSG_HISTORY_LEN = 100
 log = logging.getLogger(__file__)
@@ -69,10 +69,14 @@ class Backend:
     report_addr: str = dataclasses.field(
         default_factory=lambda: os.environ.get("REPORT_ADDR", "https://run.vast.ai")
     )
+    mtoken: str = dataclasses.field(
+        default_factory=lambda: os.environ.get("MASTER_TOKEN", "")
+    )
 
     def __post_init__(self):
         self.metrics = Metrics()
         self.metrics._set_version(self.version)
+        self.metrics._set_mtoken(self.mtoken)
         self._total_pubkey_fetch_errors = 0
         self._pubkey = self._fetch_pubkey()
         self.__start_healthcheck: bool = False
