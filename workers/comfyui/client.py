@@ -7,20 +7,13 @@ from lib.test_utils import print_truncate_res
 from utils.endpoint_util import Endpoint
 from utils.ssl import get_cert_file_path
 
-"""
-NOTE: this client example uses a custom comfy workflow compatible with SD3 only
-"""
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s[%(levelname)-5s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-log = logging.getLogger(__file__)
+from vastai import Serverless
 
 
-def call_default_workflow(
-    endpoint_group_name: str, api_key: str, server_url: str
-) -> None:
+ENDPOINT_NAME = "my-comfyui-endpoint"
+COST = 100 # Use a constant cost for image generation
+
+def call_default_workflow(client: Serverless) -> None:
     WORKER_ENDPOINT = "/prompt"
     COST = 100
     route_payload = {

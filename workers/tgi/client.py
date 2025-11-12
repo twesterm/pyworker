@@ -1,125 +1,61 @@
-import logging
-import sys
-import json
-from urllib.parse import urljoin
-import requests
-from utils.endpoint_util import Endpoint
-from utils.ssl import get_cert_file_path
+from vastai import Serverless
+import asyncio
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s[%(levelname)-5s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-log = logging.getLogger(__file__)
+ENDPOINT_NAME = "my-tgi-endpoint" # Change this to match your endpoint name
+MAX_TOKENS = 1024
+PROMPT = "Think step by step: Tell me about the Python programming language."
 
+async def call_generate(client: Serverless) -> None:
+    endpoint = await client.get_endpoint(name=ENDPOINT_NAME)
 
-def call_generate(endpoint_group_name: str, api_key: str, server_url: str) -> None:
-    WORKER_ENDPOINT = "/generate"
-    COST = 100
-    route_payload = {
-        "endpoint": endpoint_group_name,
-        "api_key": api_key,
-        "cost": COST,
+    payload = {
+        "inputs": PROMPT,
+        "parameters": {
+            "max_new_tokens": MAX_TOKENS,
+            "temperature": 0.7,
+            "return_full_text": False
+        }
     }
-    response = requests.post(
-        urljoin(server_url, "/route/"),
-        json=route_payload,
-        timeout=4,
-    )
-    response.raise_for_status()  # Raise an exception for bad status codes
-    message = response.json()
-    url = message["url"]
 
-    auth_data = dict(
-        signature=message["signature"],
-        cost=message["cost"],
-        endpoint=message["endpoint"],
-        reqnum=message["reqnum"],
-        url=url,
-    )
+    resp = await endpoint.request("/generate", payload, cost=MAX_TOKENS)
 
-    payload = dict(inputs="tell me about cats", parameters=dict(max_new_tokens=500))
-    req_data = dict(payload=payload, auth_data=auth_data)
-    url = urljoin(url, WORKER_ENDPOINT)
-    print(f"url: {url}")
-    response = requests.post(
-        url,
-        json=req_data,
-        verify=get_cert_file_path(),
-    )
-    response.raise_for_status()
-    res = response.json()
-    print(res)
+    print(resp["response"]["generated_text"])
 
 
-def call_generate_stream(
-    endpoint_group_name: str, api_key: str, server_url: str
-) -> None:
-    WORKER_ENDPOINT = "/generate_stream"
-    COST = 100
-    route_payload = {
-        "endpoint": endpoint_group_name,
-        "api_key": api_key,
-        "cost": COST,
+async def call_generate_stream(client: Serverless) -> None:
+    endpoint = await client.get_endpoint(name=ENDPOINT_NAME)
+
+    payload = {
+        "inputs": PROMPT,
+        "parameters": {
+            "max_new_tokens": MAX_TOKENS,
+            "temperature": 0.7,
+            "do_sample": True,
+            "return_full_text": False,
+        }
     }
-    response = requests.post(
-        urljoin(server_url, "/route/"),
-        json=route_payload,
-        timeout=4,
-    )
-    response.raise_for_status()  # Raise an exception for bad status codes
-    message = response.json()
-    url = message["url"]
-    print(f"url: {url}")
-    auth_data = dict(
-        signature=message["signature"],
-        cost=message["cost"],
-        endpoint=message["endpoint"],
-        reqnum=message["reqnum"],
-        url=message["url"],
-    )
-    payload = dict(inputs="tell me about dogs", parameters=dict(max_new_tokens=500))
-    req_data = dict(payload=payload, auth_data=auth_data)
-    url = urljoin(url, WORKER_ENDPOINT)
-    response = requests.post(url, json=req_data, stream=True)
-    response.raise_for_status()  # Raise an exception for bad status codes
-    for line in response.iter_lines():
-        payload = line.decode().lstrip("data:").rstrip()
-        if payload:
-            try:
-                data = json.loads(payload)
-                print(data["token"]["text"], end="")
-                sys.stdout.flush()
-            except (json.JSONDecodeError, KeyError) as e:
-                log.warning(f"Failed to parse streaming response: {e}")
-                continue
-    print()
 
+    resp = await endpoint.request(
+        "/generate_stream",
+        payload,
+        cost=MAX_TOKENS,
+        stream=True,
+    )
+    stream = resp["response"]
+
+    printed_answer = False
+    async for event in stream:
+        tok = (event.get("token") or {}).get("text")
+        if tok:
+            if not printed_answer:
+                printed_answer = True
+                print("Answer:\n", end="", flush=True)
+            print(tok, end="", flush=True)
+
+async def main():
+    async with Serverless() as client:
+        await call_generate(client)
+        await call_generate_stream(client)
 
 if __name__ == "__main__":
-    from lib.test_utils import test_args
-
-    args = test_args.parse_args()
-
-    endpoint_api_key = Endpoint.get_endpoint_api_key(
-        endpoint_name=args.endpoint_group_name,
-        account_api_key=args.api_key,
-        instance=args.instance,
-    )
-    if endpoint_api_key:
-        try:
-            call_generate(
-                api_key=endpoint_api_key,
-                endpoint_group_name=args.endpoint_group_name,
-                server_url=args.server_url,
-            )
-            call_generate_stream(
-                api_key=endpoint_api_key,
-                endpoint_group_name=args.endpoint_group_name,
-                server_url=args.server_url,
-            )
-        except Exception as e:
-            log.error(f"Error during API call: {e}")
-    else:
-        log.error(f"Failed to get API key for endpoint {args.endpoint_group_name} ")
+    asyncio.run(main())
