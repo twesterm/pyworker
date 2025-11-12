@@ -1,10 +1,10 @@
-from vastai import Serverless
 from .data_types import count_workload
-
 import uuid
 import random
 import asyncio
 import random
+
+from vastai import Serverless
 
 async def main():
     async with Serverless() as client:
