@@ -11,6 +11,7 @@ MODEL_SERVER_START_LOG_MSG = [
     "llama runner started",  # Ollama
     '"message":"Connected","target":"text_generation_router"',  # TGI
     '"message":"Connected","target":"text_generation_router::server"',  # TGI
+    "main: model loaded" # llama.cpp
 ]
 
 MODEL_SERVER_ERROR_LOG_MSGS = [
